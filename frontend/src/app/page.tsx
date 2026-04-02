@@ -12,7 +12,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const ffmpegRef = useRef(new FFmpeg());
+  const ffmpegRef = useRef<any>(null);
   const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
 
   useEffect(() => {
@@ -22,7 +22,8 @@ export default function Home() {
   const loadFfmpeg = async () => {
     try {
       const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
-      const ffmpeg = ffmpegRef.current;
+      const ffmpeg = new FFmpeg();
+      ffmpegRef.current = ffmpeg;
       
       ffmpeg.on("log", ({ message }) => {
         console.log(message);
@@ -102,8 +103,8 @@ export default function Home() {
       setProgressText("Leyendo fragmentos generados...");
       const files = await ffmpeg.listDir(".");
       const chunks = files
-        .filter((f) => f.name.startsWith("out") && f.name.endsWith(`.${ext}`))
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .filter((f: any) => f.name.startsWith("out") && f.name.endsWith(`.${ext}`))
+        .sort((a: any, b: any) => a.name.localeCompare(b.name));
 
       if (chunks.length === 0) {
         throw new Error("No se pudo segmentar el audio correctamente (formato no soportado por -c copy). Intenta convertir tu archivo a .mp3 o .m4a e intentar de nuevo.");
