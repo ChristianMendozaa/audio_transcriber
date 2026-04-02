@@ -15,7 +15,7 @@ app = FastAPI(title="Transcriptor API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://audio-transcriber-tu81.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
