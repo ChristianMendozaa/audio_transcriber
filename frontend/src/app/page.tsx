@@ -78,8 +78,8 @@ export default function Home() {
     const inName = `input.${ext}`;
 
     try {
-      if (file.size <= 20 * 1024 * 1024) {
-        // Less than 20MB, skip segmentation and send directly (works around tiny audios)
+      if (file.size <= 3.5 * 1024 * 1024) {
+        // Less than 3.5MB, skip segmentation and send directly (Vercel max is 4.5MB)
         setProgressText(`Transcribiendo archivo íntegro (${formatFileSize(file.size)})...`);
         await transcribeChunk(file, 1, 1);
         return;
@@ -90,12 +90,12 @@ export default function Home() {
       // Load file into ffmpeg virtual FS
       await ffmpeg.writeFile(inName, await fetchFile(file));
 
-      // Cut into 4-minute segments without re-encoding (-c copy)
-      setProgressText("Procesando audio localmente para sortear los límites de Serverless...");
+      // Cut into 1-minute segments without re-encoding to ensure small payload size
+      setProgressText("Procesando audio localmente para sortear los límites de Serverless (4.5MB)...");
       await ffmpeg.exec([
         "-i", inName,
         "-f", "segment",
-        "-segment_time", "240",
+        "-segment_time", "60",
         "-c", "copy",
         `out%03d.${ext}`
       ]);
