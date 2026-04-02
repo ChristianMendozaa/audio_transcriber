@@ -74,36 +74,49 @@ export default function Home() {
     setTranscription(null);
 
     const ffmpeg = ffmpegRef.current;
-    const ext = file.name.split(".").pop() || "mp3";
+    const ext = file.name.split(".").pop()?.toLowerCase() || "mp3";
+    const supportedFormats = ["flac", "m4a", "mp3", "mp4", "mpeg", "mpga", "oga", "ogg", "wav", "webm"];
+    
+    let outExt = ext;
+    let encodeArgs = ["-c", "copy"];
+    if (!supportedFormats.includes(ext)) {
+      if (ext === "aac") {
+        outExt = "m4a"; // AAC into M4A wrapper is instant via -c copy
+      } else {
+        outExt = "mp3"; // Re-encode exotic formats
+        encodeArgs = [];
+      }
+    }
+
     const inName = `input.${ext}`;
 
     try {
-      if (file.size <= 3.5 * 1024 * 1024) {
-        // Less than 3.5MB, skip segmentation and send directly (Vercel max is 4.5MB)
+      if (file.size <= 3.5 * 1024 * 1024 && supportedFormats.includes(ext)) {
+        // Less than 3.5MB natively supported, skip segmentation and send directly
         setProgressText(`Transcribiendo archivo íntegro (${formatFileSize(file.size)})...`);
         await transcribeChunk(file, 1, 1);
         return;
       }
 
-      setProgressText("Cortando el archivo en tu navegador (sin pérdida de calidad)...");
+      setProgressText("Cortando/Convirtiendo el archivo en tu navegador...");
 
       // Load file into ffmpeg virtual FS
       await ffmpeg.writeFile(inName, await fetchFile(file));
 
-      // Cut into 1-minute segments without re-encoding to ensure small payload size
+      // Cut into segments, applying logic for unsupported codecs
       setProgressText("Procesando audio localmente para sortear los límites de Serverless (4.5MB)...");
       await ffmpeg.exec([
         "-i", inName,
         "-f", "segment",
         "-segment_time", "60",
-        "-c", "copy",
-        `out%03d.${ext}`
+        ...encodeArgs,
+        `out%03d.${outExt}`
       ]);
 
       setProgressText("Leyendo fragmentos generados...");
       const files = await ffmpeg.listDir(".");
       const chunks = files
-        .filter((f: any) => f.name.startsWith("out") && f.name.endsWith(`.${ext}`))
+        .filter((f: any) => f.name.startsWith("out") && f.name.endsWith(`.${outExt}`))
         .sort((a: any, b: any) => a.name.localeCompare(b.name));
 
       if (chunks.length === 0) {
