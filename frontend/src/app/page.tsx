@@ -113,8 +113,8 @@ export default function Home() {
         setProgressText(`Transcribiendo fragmento ${i + 1} de ${chunks.length}...`);
         
         const fileData = await ffmpeg.readFile(chunks[i].name);
-        // readFile returns Uint8Array or String in v0.12. Use type coercion
-        const chunkBlob = new Blob([fileData as Uint8Array], { type: file.type });
+        // readFile returns Uint8Array or String in v0.12.
+        const chunkBlob = new Blob([fileData as any], { type: file.type });
         const chunkFile = new File([chunkBlob], chunks[i].name, { type: file.type });
         
         // Clean up from memory
