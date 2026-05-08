@@ -15,7 +15,11 @@ app = FastAPI(title="Transcriptor API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://audio-transcriber-tu81.vercel.app"],
+    allow_origins=[
+        "https://audio-transcriber-tu81.vercel.app",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,12 +53,27 @@ async def transcribe_audio(file: UploadFile = File(...)):
             # Aunque Vercel bloqueará en 4.5MB, esto protege casos locales
             raise HTTPException(status_code=413, detail="File too large for direct Whisper API (max 25MB).")
 
+        # Intentar arreglar/reempaquetar el archivo con ffmpeg si está disponible
+        import subprocess
+        fixed_tmp_input_path = tmp_input_path + "_fixed.m4a"
+        file_to_send = tmp_input_path
+        try:
+            # Intentar reempaquetar (ej: ADTS a m4a) o convertir
+            subprocess.run(["ffmpeg", "-y", "-i", tmp_input_path, "-c:a", "copy", fixed_tmp_input_path], 
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if os.path.exists(fixed_tmp_input_path) and os.path.getsize(fixed_tmp_input_path) > 0:
+                file_to_send = fixed_tmp_input_path
+                file.filename = "audio.m4a"
+        except Exception:
+            pass # Si ffmpeg no está disponible (ej. en Vercel) o falla, enviamos el original
+
         logger.info("Enviando Fragmento directamente a OpenAI Whisper API...")
-        with open(tmp_input_path, "rb") as audio_file:
+        with open(file_to_send, "rb") as audio_file:
             response = client.audio.transcriptions.create(
                 model="whisper-1",
                 language="es",
-                file=audio_file
+                prompt="El siguiente es un audio en español transcrito con excelente ortografía, gramática y puntuación precisa. Se utilizan comas y puntos finales correctamente.",
+                file=(file.filename, audio_file.read())
             )
             
         logger.info(f"Respuesta exitosa de OpenAI para el chunk. Limpiando y devolviendo...")
@@ -68,5 +87,10 @@ async def transcribe_audio(file: UploadFile = File(...)):
         # Siempre limpiar el archivo subido
         if os.path.exists(tmp_input_path):
             os.unlink(tmp_input_path)
+        try:
+            if 'fixed_tmp_input_path' in locals() and os.path.exists(fixed_tmp_input_path):
+                os.unlink(fixed_tmp_input_path)
+        except Exception:
+            pass
 
     return {"text": text.strip()}

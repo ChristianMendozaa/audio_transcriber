@@ -76,35 +76,40 @@ export default function Home() {
     const ffmpeg = ffmpegRef.current;
     const ext = file.name.split(".").pop()?.toLowerCase() || "mp3";
     const supportedFormats = ["flac", "m4a", "mp3", "mp4", "mpeg", "mpga", "oga", "ogg", "wav", "webm"];
+    const videoExtensions = ["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v", "3gp"];
+    const isVideo = file.type.startsWith("video/") || videoExtensions.includes(ext);
     
     let outExt = ext;
     let encodeArgs = ["-c", "copy"];
-    if (!supportedFormats.includes(ext)) {
-      if (ext === "aac") {
-        outExt = "m4a"; // AAC into M4A wrapper is instant via -c copy
-      } else {
-        outExt = "mp3"; // Re-encode exotic formats
-        encodeArgs = [];
-      }
+    
+    if (isVideo || !supportedFormats.includes(ext)) {
+      // Si es un video o formato exótico, re-codificamos extrayendo solo el audio.
+      // Parámetros mágicos de Accuracy: Whisper funciona a 16kHz internamente. 
+      // Al convertirlo en el navegador a 16kHz y Mono, evitamos perder calidad real,
+      // mientras eliminamos el 90% del peso de canales estéreo y frecuencias que la IA ignora.
+      outExt = "m4a"; 
+      encodeArgs = ["-vn", "-ac", "1", "-ar", "16000", "-c:a", "aac", "-b:a", "64k"];
+    } else if (ext === "aac") {
+      outExt = "m4a"; // AAC nativo se envuelve directo
     }
 
     const inName = `input.${ext}`;
 
     try {
-      if (file.size <= 3.5 * 1024 * 1024 && supportedFormats.includes(ext)) {
-        // Less than 3.5MB natively supported, skip segmentation and send directly
+      if (!isVideo && file.size <= 3.5 * 1024 * 1024 && supportedFormats.includes(ext) && ext !== "aac") {
+        // Less than 3.5MB natively supported pure AUDIO, skip segmentation and send directly
         setProgressText(`Transcribiendo archivo íntegro (${formatFileSize(file.size)})...`);
         await transcribeChunk(file, 1, 1);
         return;
       }
 
-      setProgressText("Cortando/Convirtiendo el archivo en tu navegador...");
+      setProgressText(isVideo ? "Extrayendo y optimizando audio del video..." : "Cortando/Convirtiendo el archivo en tu navegador...");
 
       // Load file into ffmpeg virtual FS
       await ffmpeg.writeFile(inName, await fetchFile(file));
 
-      // Cut into segments, applying logic for unsupported codecs
-      setProgressText("Procesando audio localmente para sortear los límites de Serverless (4.5MB)...");
+      // Cut into segments, applying logic for videos and unsupported codecs
+      setProgressText(`Procesando localmente para sortear límites de Servidor...`);
       await ffmpeg.exec([
         "-i", inName,
         "-f", "segment",
@@ -198,7 +203,7 @@ export default function Home() {
                 className="hidden"
                 ref={fileInputRef}
                 onChange={handleFileChange}
-                accept="audio/*,video/*,.aac,.mp3,.wav,.m4a"
+                accept="audio/*,video/*,.aac,.mp3,.wav,.m4a,.mp4,.mkv,.avi,.mov,.webm,.flv,.wmv,.m4v,.3gp"
               />
               
               {!file ? (
